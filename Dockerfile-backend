@@ -1,0 +1,46 @@
+# Stage 1: Build the Go application
+FROM golang:1.19-alpine AS builder
+
+# Set environment variables
+ENV GO111MODULE=on
+
+# Create and set the working directory
+WORKDIR /app
+
+# Copy the Go modules manifests
+COPY backend/go.mod backend/go.sum ./
+
+# Download Go module dependencies
+RUN go mod download
+
+# Copy the source code
+COPY backend/ ./
+
+# Build the application binary
+RUN go build -o app .
+
+# Stage 2: Set up the final environment
+FROM alpine:latest
+
+# Install necessary packages (optional, for SSL certificates)
+RUN apk --no-cache add ca-certificates
+
+# Set working directory
+WORKDIR /app
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/app .
+
+# Expose the application port
+EXPOSE 8080
+
+# Define environment variables (optional; use if .env file isn’t provided)
+ENV ALLOWED_ORIGINS=*
+ENV DB_HOST=localhost
+ENV DB_USER=postgres
+ENV DB_PASSWORD=Onk@r27vk
+ENV DB_NAME=yourdb
+ENV DB_PORT=5432
+
+# Run the application
+CMD ["./app"]
