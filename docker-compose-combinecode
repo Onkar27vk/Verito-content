@@ -1,0 +1,40 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend_builder  # Only build the frontend for this service
+    ports:
+      - "3000:3000"
+    environment:
+      - ALLOWED_ORIGINS=*  # Adjust as needed
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend_builder  # Only build the backend for this service
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db  # Use the service name for the database connection
+      - DB_USER=postgres
+      - DB_PASSWORD=Onk@r27vk
+      - DB_NAME=yourdb
+      - DB_PORT=5432
+    depends_on:
+      - db  # Ensure the database is started before the backend
+
+  db:
+    image: postgres:latest  # Using the official PostgreSQL image
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Onk@r27vk
+      POSTGRES_DB: yourdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persist data
+
+volumes:
+  postgres_data:
