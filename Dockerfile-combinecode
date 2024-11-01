@@ -1,0 +1,67 @@
+# Stage 1: Build the Node.js frontend
+FROM node:14 AS frontend_builder
+
+# Set working directory
+WORKDIR /app/frontend
+
+# Copy package.json and package-lock.json to install dependencies
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the frontend source code
+COPY frontend/ ./
+
+# Build the frontend application
+RUN npm run build
+
+# Stage 2: Build the Go backend
+FROM golang:1.19-alpine AS backend_builder
+
+# Set environment variables
+ENV GO111MODULE=on
+
+# Set working directory
+WORKDIR /app/backend
+
+# Copy Go modules manifests
+COPY backend/go.mod backend/go.sum ./
+
+# Download Go module dependencies
+RUN go mod download
+
+# Copy the Go source code
+COPY backend/ ./
+
+# Build the Go application binary
+RUN go build -o backend_app .
+
+# Stage 3: Create the final container with both frontend and backend
+FROM alpine:latest
+
+# Install necessary packages for SSL certificates (optional)
+RUN apk --no-cache add ca-certificates
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built frontend files from frontend_builder
+COPY --from=frontend_builder /app/frontend/build ./frontend
+
+# Copy the Go binary from backend_builder
+COPY --from=backend_builder /app/backend/backend_app .
+
+# Set environment variables
+ENV ALLOWED_ORIGINS=*
+ENV DB_HOST=localhost
+ENV DB_USER=postgres
+ENV DB_PASSWORD=Onk@r27vk
+ENV DB_NAME=yourdb
+ENV DB_PORT=5432
+
+# Expose the frontend and backend ports
+EXPOSE 3000 8080
+
+# Command to run both frontend and backend
+CMD [ "sh", "-c", "./backend_app & http-server ./frontend -p 3000" ]
