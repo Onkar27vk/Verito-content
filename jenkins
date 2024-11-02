@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        REACT_IMAGE = "your_dockerhub_username/frontend:latest"
-        GO_IMAGE = "your_dockerhub_username/backend:latest"
+        REACT_IMAGE = "onkar27vk/frontend:latest"
+        GO_IMAGE = "onkar27vk/backend:latest"
         EKS_CLUSTER = "your-eks-cluster"
         AWS_REGION = "us-west-2" // Set to your AWS region
         SONARQUBE_SERVER = 'SonarQube'
