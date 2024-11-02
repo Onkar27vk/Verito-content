@@ -2,91 +2,71 @@ pipeline {
     agent any
 
     environment {
-        REACT_IMAGE = "onkar27vk/frontend:latest"
-        GO_IMAGE = "onkar27vk/backend:latest"
-        EKS_CLUSTER = "your-eks-cluster"
-        AWS_REGION = "us-west-2" // Set to your AWS region
-        SONARQUBE_SERVER = 'SonarQube'
-        SONARQUBE_CREDENTIALS_ID = 'sonarqube-credentials'
+        FRONTEND_IMAGE = 'your-dockerhub-username/frontend-app'
+        BACKEND_IMAGE = 'your-dockerhub-username/backend-app'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-repo/devops-fullstack-app.git'
+                // Pull the latest code from the repository
+                checkout scm
             }
         }
 
-        stage('Build Frontend Image') {
-            agent { docker { image 'node:14' } }
+        stage('Build Frontend') {
             steps {
                 dir('frontend') {
+                    // Install dependencies and build the React application
                     sh 'npm install'
                     sh 'npm run build'
                 }
-                script {
-                    docker.build(REACT_IMAGE, 'frontend')
-                }
             }
         }
 
-        stage('Build Backend Image') {
-            agent { docker { image 'golang:1.21.0' } }
+        stage('Build Backend') {
             steps {
                 dir('backend') {
+                    // Build the Golang binary
                     sh 'go mod download'
-                    sh 'CGO_ENABLED=0 GOOS=linux go build -o app'
+                    sh 'go build -o main .'
                 }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                // Build Docker images for frontend and backend
                 script {
-                    docker.build(GO_IMAGE, 'backend')
+                    docker.build("${FRONTEND_IMAGE}:latest", 'frontend')
+                    docker.build("${BACKEND_IMAGE}:latest", 'backend')
                 }
             }
         }
 
-        stage('Security Scan with Trivy') {
+        stage('Push Docker Images') {
             steps {
-                sh """
-                    trivy image ${REACT_IMAGE} --severity HIGH,CRITICAL --no-progress
-                    trivy image ${GO_IMAGE} --severity HIGH,CRITICAL --no-progress
-                """
-            }
-        }
-
-        stage('Code Analysis with SonarQube') {
-            environment {
-                SONAR_SCANNER_HOME = tool 'SonarQube Scanner'
-            }
-            steps {
-                withSonarQubeEnv(SONARQUBE_SERVER) {
-                    dir('frontend') {
-                        sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=frontend -Dsonar.sources=. -Dsonar.login=${SONARQUBE_CREDENTIALS_ID}"
-                    }
-                    dir('backend') {
-                        sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=backend -Dsonar.sources=. -Dsonar.login=${SONARQUBE_CREDENTIALS_ID}"
+                // Push both images to DockerHub
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDENTIALS_ID) {
+                        docker.image("${FRONTEND_IMAGE}:latest").push()
+                        docker.image("${BACKEND_IMAGE}:latest").push()
                     }
                 }
             }
         }
 
-        stage('Push Images to DockerHub') {
+        stage('Deploy to Kubernetes') {
             steps {
+                // Apply Kubernetes deployment configurations
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
-                        docker.image(REACT_IMAGE).push()
-                        docker.image(GO_IMAGE).push()
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to EKS') {
-            steps {
-                script {
-                    sh """
-                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER}
-                        kubectl apply -f k8s/deployment.yaml
-                        kubectl apply -f k8s/service.yaml
-                    """
+                    sh '''
+                    kubectl apply -f k8s/frontend-deployment.yml
+                    kubectl apply -f k8s/frontend-service.yml
+                    kubectl apply -f k8s/backend-deployment.yml
+                    kubectl apply -f k8s/backend-service.yml
+                    '''
                 }
             }
         }
@@ -94,12 +74,15 @@ pipeline {
 
     post {
         always {
+            echo 'Cleaning up workspace...'
             cleanWs()
         }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
         failure {
-            mail to: 'your-email@example.com',
-                 subject: "Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "Check the console output for details: ${env.BUILD_URL}"
+            echo 'Pipeline failed. Please check the logs.'
         }
     }
 }
+
